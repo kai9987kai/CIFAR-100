@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIFAR-10 Browser Demo - Hybrid Trained Model</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2rem;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin: 4px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 20px 0;
+        }
+
+        .upload-area:hover {
+            background: #f8f9ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.dragover {
+            background: #f0f3ff;
+            border-color: #764ba2;
+            transform: scale(1.02);
+        }
+
+        #preview {
+            max-width: 100%;
+            max-height: 300px;
+            margin: 20px 0;
+            border-radius: 8px;
+            display: none;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9ff, #fff);
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .prediction-class {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .confidence {
+            font-size: 1.1rem;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-weight: bold;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .info {
+            background: #fff9e6;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 0.9rem;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎯 CIFAR-10 Classifier</h1>
+        <div class="subtitle">
+            Hybrid-Trained Model (NPU + GPU + CPU)
+            <div>
+                <span class="badge">10 Classes</span>
+                <span class="badge">ONNX.js</span>
+                <span class="badge">Browser-Based</span>
+            </div>
+        </div>
+
+        <div class="info">
+            <strong>📝 Note:</strong> This demo requires the ONNX model to be exported first.
+            Run <code>python export_to_onnx.py</code> to generate <code>demo/cifar100_model.onnx</code>
+        </div>
+
+        <div class="upload-area" id="dropZone">
+            <p>📁 Click to upload or drag & drop an image</p>
+            <p style="color: #999; font-size: 0.85rem; margin-top: 8px;">Supported: JPG, PNG</p>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+        </div>
+
+        <img id="preview" alt="Preview">
+
+        <button id="classifyBtn" disabled>🔍 Classify Image</button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Analyzing image...</p>
+        </div>
+
+        <div class="result" id="result">
+            <div class="prediction-class" id="prediction">-</div>
+            <div class="confidence" id="confidence">-</div>
+        </div>
+    </div>
+
+    <script>
+        const CIFAR10_CLASSES = [
+            "airplane", "automobile", "bird", "cat", "deer",
+            "dog", "frog", "horse", "ship", "truck"
+        ];
+
+        let session = null;
+        let currentFile = null;
+
+        // Elements
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const classifyBtn = document.getElementById('classifyBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const prediction = document.getElementById('prediction');
+        const confidence = document.getElementById('confidence');
+
+        // Load ONNX model
+        async function loadModel() {
+            try {
+                session = await ort.InferenceSession.create('cifar100_model.onnx');
+                console.log('✓ Model loaded successfully');
+                classifyBtn.textContent = '🔍 Classify Image (Model Ready)';
+            } catch (error) {
+                console.error('Failed to load model:', error);
+                classifyBtn.textContent = '⚠️ Model not found - Run export_to_onnx.py first';
+            }
+        }
+
+        // File handling
+        dropZone.onclick = () => fileInput.click();
+
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        };
+
+        dropZone.ondragleave = () => {
+            dropZone.classList.remove('dragover');
+        };
+
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        };
+
+        fileInput.onchange = (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        };
+
+        function handleFile(file) {
+            currentFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                classifyBtn.disabled = !session;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Image preprocessing
+        function preprocessImage(imgElement) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 224;
+            canvas.height = 224;
+            const ctx = canvas.getContext('2d');
+
+            ctx.drawImage(imgElement, 0, 0, 224, 224);
+            const imageData = ctx.getImageData(0, 0, 224, 224);
+
+            const float32Data = new Float32Array(3 * 224 * 224);
+            const mean = [0.485, 0.456, 0.406];
+            const std = [0.229, 0.224, 0.225];
+
+            for (let i = 0; i < 224 * 224; i++) {
+                float32Data[i] = (imageData.data[i * 4] / 255 - mean[0]) / std[0];
+                float32Data[224 * 224 + i] = (imageData.data[i * 4 + 1] / 255 - mean[1]) / std[1];
+                float32Data[224 * 224 * 2 + i] = (imageData.data[i * 4 + 2] / 255 - mean[2]) / std[2];
+            }
+
+            return new ort.Tensor('float32', float32Data, [1, 3, 224, 224]);
+        }
+
+        // Classification
+        classifyBtn.onclick = async () => {
+            if (!session || !currentFile) return;
+
+            loading.classList.add('show');
+            result.classList.remove('show');
+            classifyBtn.disabled = true;
+
+            try {
+                const img = new Image();
+                img.src = preview.src;
+                await img.decode();
+
+                const tensor = preprocessImage(img);
+                const feeds = { input: tensor };
+                const results = await session.run(feeds);
+                const output = results.output.data;
+
+                // Find top prediction
+                let maxIdx = 0;
+                let maxVal = output[0];
+                for (let i = 1; i < output.length; i++) {
+                    if (output[i] > maxVal) {
+                        maxVal = output[i];
+                        maxIdx = i;
+                    }
+                }
+
+                // Softmax for confidence
+                const expSum = Array.from(output).reduce((sum, val) => sum + Math.exp(val), 0);
+                const conf = Math.exp(maxVal) / expSum;
+
+                prediction.textContent = CIFAR10_CLASSES[maxIdx].toUpperCase().replace(/_/g, ' ');
+                confidence.textContent = `Confidence: ${(conf * 100).toFixed(1)}% (Class ${maxIdx})`;
+
+                result.classList.add('show');
+            } catch (error) {
+                alert('Classification failed: ' + error.message);
+                console.error(error);
+            } finally {
+                loading.classList.remove('show');
+                classifyBtn.disabled = false;
+            }
+        };
+
+        // Initialize
+        loadModel();
+    </script>
+</body>
+
+</html>
