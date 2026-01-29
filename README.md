@@ -1,6 +1,5 @@
 # CIFAR-100 Browser Demo
 
-This folder contains a standalone HTML demo for classifying images using the hybrid-trained CIFAR-100 model.
 
 ## Features
 
