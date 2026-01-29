@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hybrid Model Demo (CIFAR-10)</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --text: #f8fafc;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            width: 100%;
+            padding: 2rem;
+            background: var(--surface);
+            text-align: center;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        h1 {
+            margin: 0;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            margin-top: 3rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            max-width: 900px;
+            width: 90%;
+        }
+
+        .card {
+            background: var(--surface);
+            padding: 2rem;
+            border-radius: 1rem;
+            border: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #drop-zone {
+            width: 100%;
+            height: 200px;
+            border: 2px dashed #475569;
+            border-radius: 0.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #drop-zone:hover {
+            border-color: var(--primary);
+            background: #1e293b;
+        }
+
+        button {
+            margin-top: 1.5rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            transition: transform 0.1s;
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .result-box {
+            width: 100%;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #0f172a;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+
+        .role-badge {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            margin-bottom: 0.5rem;
+        }
+
+        .prediction {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #38bdf8;
+        }
+
+        img {
+            max-width: 100%;
+            max-height: 200px;
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Hybrid Training Demo</h1>
+        <p>CIFAR-10 Classification</p>
+    </header>
+
+    <div class="container">
+        <div class="card" style="grid-column: span 2;">
+            <div id="drop-zone">
+                <p>Click or Drag Image Here</p>
+                <input type="file" id="file-input" accept="image/*" style="display: none;">
+            </div>
+            <img id="preview" alt="Preview">
+            <button onclick="predict()">Analyze Image</button>
+        </div>
+
+        <div class="card" style="grid-column: span 2;">
+            <div class="role-badge">CIFAR-10 Model (Trained on 10 Classes)</div>
+            <div class="result-box">
+                <div class="prediction" id="prediction">-</div>
+                <div style="margin-top: 0.5rem; font-size: 0.9rem; color: #94a3b8;" id="confidence">-</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const preview = document.getElementById('preview');
+        let currentFile = null;
+
+        dropZone.onclick = () => fileInput.click();
+
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.borderColor = '#6366f1'; };
+        dropZone.ondragleave = () => { dropZone.style.borderColor = '#475569'; };
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#475569';
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        };
+
+        fileInput.onchange = (e) => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        };
+
+        function handleFile(file) {
+            currentFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                dropZone.querySelector('p').style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function predict() {
+            if (!currentFile) return alert("Please select an image first");
+
+            const formData = new FormData();
+            formData.append('file', currentFile);
+
+            document.getElementById('prediction').innerText = "Analyzing...";
+            document.getElementById('confidence').innerText = "";
+
+            try {
+                const res = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.error) throw new Error(data.error);
+
+                document.getElementById('prediction').innerText = data.class_name.toUpperCase();
+                document.getElementById('confidence').innerText = `Confidence: ${data.confidence.toFixed(1)}%`;
+            } catch (e) {
+                alert("Error: " + e.message);
+                document.getElementById('prediction').innerText = "Error";
+                document.getElementById('confidence').innerText = "";
+            }
+        }
+    </script>
+</body>
+
+</html>

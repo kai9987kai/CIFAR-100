@@ -1,0 +1,11 @@
+torch
+torchvision
+numpy
+openvino>=2024.0.0
+tqdm
+onnx
+onnxscript
+datasets
+transformers
+scikit-learn
+flask
